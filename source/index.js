@@ -90,12 +90,13 @@ const refreshAuthorizationToken = async (refreshToken, options) => {
   return JSON.parse(body);
 };
 
-const getApplePublicKey = async () => {
+const getApplePublicKey = async (kid) => {
   const url = new URL(ENDPOINT_URL);
   url.pathname = '/auth/keys';
 
   const data = await request({ url: url.toString(), method: 'GET' });
-  const key = JSON.parse(data).keys[0];
+  const keys = JSON.parse(data).keys;
+  const key = keys.find(k => k.kid === kid);
 
   const pubKey = new NodeRSA();
   pubKey.importKey({ n: Buffer.from(key.n, 'base64'), e: Buffer.from(key.e, 'base64') }, 'components-public');
@@ -103,7 +104,8 @@ const getApplePublicKey = async () => {
 };
 
 const verifyIdToken = async (idToken, clientID) => {
-  const applePublicKey = await getApplePublicKey();
+  const decodedToken = jwt.decode(idToken, { complete: true });
+  const applePublicKey = await getApplePublicKey(decodedToken.header.kid);
   const jwtClaims = jwt.verify(idToken, applePublicKey, { algorithms: 'RS256' });
 
   if (jwtClaims.iss !== TOKEN_ISSUER) throw new Error('id token not issued by correct OpenID provider - expected: ' + TOKEN_ISSUER + ' | from: ' + jwtClaims.iss);
